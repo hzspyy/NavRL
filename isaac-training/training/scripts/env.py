@@ -1,22 +1,83 @@
-import torch
+import importlib
+import importlib.util
+import time
+
 import einops
 import numpy as np
+import torch
 from tensordict.tensordict import TensorDict, TensorDictBase
-from torchrl.data import UnboundedContinuousTensorSpec, CompositeSpec, DiscreteTensorSpec
-from omni_drones.envs.isaac_env import IsaacEnv, AgentSpec
-import omni.isaac.orbit.sim as sim_utils
-from omni_drones.robots.drone import MultirotorBase
-from omni.isaac.orbit.assets import AssetBaseCfg
-from omni.isaac.orbit.terrains import TerrainImporterCfg, TerrainImporter, TerrainGeneratorCfg, HfDiscreteObstaclesTerrainCfg
-from omni_drones.utils.torch import euler_to_quaternion, quat_axis
-from omni.isaac.orbit.sensors import RayCaster, RayCasterCfg, patterns
-from omni.isaac.core.utils.viewports import set_camera_view
-from utils import vec_to_new_frame, vec_to_world, construct_input
-import omni.isaac.core.utils.prims as prim_utils
-import omni.isaac.orbit.sim as sim_utils
-import omni.isaac.orbit.utils.math as math_utils
-from omni.isaac.orbit.assets import RigidObject, RigidObjectCfg
-import time
+from torchrl.data import CompositeSpec, DiscreteTensorSpec, UnboundedContinuousTensorSpec
+
+from utils import construct_input, vec_to_new_frame, vec_to_world
+
+
+def _optional_import(module_name: str, package_bases):
+    """Attempt to import a module from a list of base packages without raising spurious errors."""
+
+    for base in package_bases:
+        full_name = f"{base}.{module_name}"
+        if importlib.util.find_spec(full_name):
+            return importlib.import_module(full_name)
+    raise ImportError(f"Module {module_name} not found in bases: {package_bases}")
+
+
+def _import_from_candidates(candidates):
+    for module_path, attrs in candidates:
+        if importlib.util.find_spec(module_path):
+            module = importlib.import_module(module_path)
+            return tuple(getattr(module, attr) for attr in attrs)
+    raise ImportError(f"None of the candidates {candidates} could be imported")
+
+
+# Isaac Lab 2.3 renamed several Orbit modules. Try the new lab namespace first
+# and fall back to the older Orbit layout when running on legacy installations.
+AgentSpec, IsaacEnv = _import_from_candidates(
+    [("omni.isaac.lab.envs", ("AgentSpec", "IsaacEnv")), ("omni_drones.envs.isaac_env", ("AgentSpec", "IsaacEnv"))]
+)
+
+
+MultirotorBase, = _import_from_candidates(
+    [("omni.isaac.lab.robots", ("MultirotorBase",)), ("omni_drones.robots.drone", ("MultirotorBase",))]
+)
+
+
+sim_utils = _optional_import("sim", ["omni.isaac.lab", "omni.isaac.orbit"])
+assets_module = _optional_import("assets", ["omni.isaac.lab", "omni.isaac.orbit"])
+AssetBaseCfg = getattr(assets_module, "AssetBaseCfg")
+
+terrains_module = _optional_import("terrains", ["omni.isaac.lab", "omni.isaac.orbit"])
+TerrainImporterCfg = getattr(terrains_module, "TerrainImporterCfg")
+TerrainImporter = getattr(terrains_module, "TerrainImporter")
+TerrainGeneratorCfg = getattr(terrains_module, "TerrainGeneratorCfg")
+HfDiscreteObstaclesTerrainCfg = getattr(terrains_module, "HfDiscreteObstaclesTerrainCfg")
+
+euler_to_quaternion, quat_axis = _import_from_candidates(
+    [("omni.isaac.lab.utils.math", ("euler_to_quaternion", "quat_axis")), ("omni.isaac.orbit.utils.math", ("euler_to_quaternion", "quat_axis")), ("omni_drones.utils.torch", ("euler_to_quaternion", "quat_axis"))]
+)
+
+sensors_module = _optional_import("sensors", ["omni.isaac.lab", "omni.isaac.orbit"])
+RayCaster = getattr(sensors_module, "RayCaster")
+RayCasterCfg = getattr(sensors_module, "RayCasterCfg")
+patterns = getattr(sensors_module, "patterns")
+
+if importlib.util.find_spec("omni.isaac.core.utils.viewports"):
+    from omni.isaac.core.utils.viewports import set_camera_view
+else:
+    set_camera_view = None
+
+if importlib.util.find_spec("omni.isaac.core.utils.prims"):
+    import omni.isaac.core.utils.prims as prim_utils
+else:
+    prim_utils = None
+
+if prim_utils is None:
+    raise ImportError(
+        "Unable to import prim utilities from Isaac Sim. Verify Isaac Sim 5.0 or newer is installed "
+        "and available in PYTHONPATH."
+    )
+
+RigidObject = getattr(assets_module, "RigidObject")
+RigidObjectCfg = getattr(assets_module, "RigidObjectCfg")
 
 class NavigationEnv(IsaacEnv):
 

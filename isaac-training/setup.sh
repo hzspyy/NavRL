@@ -6,13 +6,17 @@ set -e
 # Define environment name
 ENV_NAME="NavRL"
 
+# Version pins for the upgraded toolchain
+TORCH_VERSION=${TORCH_VERSION:-2.7.0}
+ISAAC_SIM_VERSION=${ISAAC_SIM_VERSION:-5.0.0}
+ISAAC_LAB_VERSION=${ISAAC_LAB_VERSION:-2.3.0}
+
 # Load Conda environment handling
 eval "$(conda shell.bash hook)"
 conda create -n $ENV_NAME python=3.10
 
-# Step 1: Setup Orbit
-echo "Setting up Orbit..."
-# cd ../orbit
+# Step 1: Setup Orbit / Isaac Lab
+echo "Setting up Isaac Lab ${ISAAC_LAB_VERSION} (Isaac Sim ${ISAAC_SIM_VERSION})..."
 cd ./third_party/orbit
 
 # Remove existing symbolic link if it exists
@@ -25,8 +29,9 @@ elif [ -e "_isaac_sim" ]; then
 fi
 ln -s ${ISAACSIM_PATH} _isaac_sim
 echo "Running orbit.sh setup..."
-./orbit.sh --conda $ENV_NAME
+./orbit.sh --conda $ENV_NAME --version ${ISAAC_LAB_VERSION}
 conda activate $ENV_NAME
+pip install "torch==${TORCH_VERSION}"
 pip install numpy==1.26.4
 pip install "pydantic!=1.7,!=1.7.1,!=1.7.2,!=1.7.3,!=1.8,!=1.8.1,<2.0.0,>=1.6.2"
 pip install imageio-ffmpeg==0.4.9

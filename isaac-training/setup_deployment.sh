@@ -6,6 +6,11 @@ set -e
 # Define environment name
 ENV_NAME="NavRL"
 
+# Version pins for modern GPU stacks
+TORCH_VERSION=${TORCH_VERSION:-2.7.0}
+ISAAC_SIM_VERSION=${ISAAC_SIM_VERSION:-5.0.0}
+ISAAC_LAB_VERSION=${ISAAC_LAB_VERSION:-2.3.0}
+
 # Load Conda environment handling
 eval "$(conda shell.bash hook)"
 
@@ -15,7 +20,7 @@ echo "Setting up conda env..."
 conda create -n $ENV_NAME python=3.10 -c conda-forge
 conda activate $ENV_NAME
 pip install numpy==1.26.4
-pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2
+pip install "torch==${TORCH_VERSION}" "torchvision==${TORCH_VERSION}" "torchaudio==${TORCH_VERSION}"
 pip install "pydantic!=1.7,!=1.7.1,!=1.7.2,!=1.7.3,!=1.8,!=1.8.1,<2.0.0,>=1.6.2"
 pip install imageio-ffmpeg==0.4.9
 pip install moviepy==1.0.3

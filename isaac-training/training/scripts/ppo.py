@@ -6,7 +6,14 @@ from tensordict.nn import TensorDictModuleBase, TensorDictSequential, TensorDict
 from einops.layers.torch import Rearrange
 from torchrl.modules import ProbabilisticActor
 from torchrl.envs.transforms import CatTensors
+
 from utils import ValueNorm, make_mlp, IndependentNormal, Actor, GAE, make_batch, IndependentBeta, BetaActor, vec_to_world
+
+
+if hasattr(torch, "vmap"):
+    _vmap = torch.vmap
+else:
+    from torch.func import vmap as _vmap
 
 
 
@@ -40,8 +47,9 @@ class PPO(TensorDictModuleBase):
             TensorDictModule(make_mlp([256, 256]), ["_feature"], ["_feature"]),
         ).to(self.device)
 
-        # Actor etwork
-        self.n_agents, self.action_dim = action_spec.shape
+        action_tensor_spec = action_spec["agents", "action"] if isinstance(action_spec, TensorDict) or hasattr(action_spec, "__getitem__") else action_spec
+        self.action_dim = action_tensor_spec.shape[-1]
+        self.n_agents = action_tensor_spec.shape[0] if len(action_tensor_spec.shape) > 1 else 1
         self.actor = ProbabilisticActor(
             TensorDictModule(BetaActor(self.action_dim), ["_feature"], ["alpha", "beta"]),
             in_keys=["alpha", "beta"],
@@ -95,7 +103,7 @@ class PPO(TensorDictModuleBase):
         # tensordict: (num_env, num_frames, dim), batchsize = num_env * num_frames
         next_tensordict = tensordict["next"]
         with torch.no_grad():
-            next_tensordict = torch.vmap(self.feature_extractor)(next_tensordict) # calculate features for next state value calculation
+            next_tensordict = _vmap(self.feature_extractor)(next_tensordict) # calculate features for next state value calculation
             next_values = self.critic(next_tensordict)["state_value"]
         rewards = tensordict["next", "agents", "reward"] # Reward obtained by state transition
         dones = tensordict["next", "terminated"] # Whether the next states are terminal states
