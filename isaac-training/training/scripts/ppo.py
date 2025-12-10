@@ -1,13 +1,13 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from tensordict.tensordict import TensorDict
-from tensordict.nn import TensorDictModuleBase, TensorDictSequential, TensorDictModule
 from einops.layers.torch import Rearrange
-from torchrl.modules import ProbabilisticActor
+from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
+from tensordict.tensordict import TensorDict
 from torchrl.envs.transforms import CatTensors
+from torchrl.modules import ProbabilisticActor
 
-from utils import ValueNorm, make_mlp, IndependentNormal, Actor, GAE, make_batch, IndependentBeta, BetaActor, vec_to_world
+from utils import BetaActor, GAE, IndependentBeta, ValueNorm, make_batch, make_mlp, vec_to_world
 
 
 if hasattr(torch, "vmap"):

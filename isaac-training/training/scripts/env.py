@@ -67,6 +67,8 @@ else:
 
 if importlib.util.find_spec("omni.isaac.core.utils.prims"):
     import omni.isaac.core.utils.prims as prim_utils
+elif importlib.util.find_spec("omni.isaac.core.prims"):
+    import omni.isaac.core.prims as prim_utils
 else:
     prim_utils = None
 
