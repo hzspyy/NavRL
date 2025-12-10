@@ -1,18 +1,45 @@
-import argparse
-import os
-import hydra
 import datetime
-import wandb
+import importlib
+import importlib.util
+import os
+
+import hydra
 import torch
+import wandb
 from omegaconf import DictConfig, OmegaConf
 from omni.isaac.kit import SimulationApp
-from ppo import PPO
-from omni_drones.controllers import LeePositionController
-from omni_drones.utils.torchrl.transforms import VelController, ravel_composite
-from omni_drones.utils.torchrl import SyncDataCollector, EpisodeStats
-from torchrl.envs.transforms import TransformedEnv, Compose
-from utils import evaluate
+from torchrl.envs.transforms import Compose, TransformedEnv
 from torchrl.envs.utils import ExplorationType
+
+from ppo import PPO
+from utils import evaluate
+
+
+def _import_from_candidates(candidates):
+    for module_path, attrs in candidates:
+        if importlib.util.find_spec(module_path):
+            module = importlib.import_module(module_path)
+            return tuple(getattr(module, attr) for attr in attrs)
+    raise ImportError(f"None of the candidates {candidates} could be imported")
+
+
+LeePositionController, = _import_from_candidates(
+    [("omni.isaac.lab.controllers", ("LeePositionController",)), ("omni_drones.controllers", ("LeePositionController",))]
+)
+
+VelController, = _import_from_candidates(
+    [
+        ("omni.isaac.lab.utils.torchrl.transforms", ("VelController",)),
+        ("omni_drones.utils.torchrl.transforms", ("VelController",)),
+    ]
+)
+
+SyncDataCollector, EpisodeStats = _import_from_candidates(
+    [
+        ("omni.isaac.lab.utils.torchrl", ("SyncDataCollector", "EpisodeStats")),
+        ("omni_drones.utils.torchrl", ("SyncDataCollector", "EpisodeStats")),
+    ]
+)
 
 
 FILE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "cfg")

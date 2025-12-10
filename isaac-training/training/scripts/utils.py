@@ -1,11 +1,26 @@
+import importlib
+import importlib.util
+from typing import Iterable, Union
+
+import numpy as np
 import torch
 import torch.nn as nn
 import wandb
-import numpy as np
-from typing import Iterable, Union
 from tensordict.tensordict import TensorDict
-from omni_drones.utils.torchrl import RenderCallback
 from torchrl.envs.utils import ExplorationType, set_exploration_type
+
+
+def _import_from_candidates(candidates):
+    for module_path, attrs in candidates:
+        if importlib.util.find_spec(module_path):
+            module = importlib.import_module(module_path)
+            return tuple(getattr(module, attr) for attr in attrs)
+    raise ImportError(f"None of the candidates {candidates} could be imported")
+
+
+RenderCallback, = _import_from_candidates(
+    [("omni.isaac.lab.utils.torchrl", ("RenderCallback",)), ("omni_drones.utils.torchrl", ("RenderCallback",))]
+)
 
 class ValueNorm(nn.Module):
     def __init__(

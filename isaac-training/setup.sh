@@ -1,85 +1,71 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# Exit immediately if a command fails
-set -e
+set -euo pipefail
 
 # Define environment name
 ENV_NAME="NavRL"
 
-# Load Conda environment handling
-eval "$(conda shell.bash hook)"
-conda create -n $ENV_NAME python=3.10
+# Version pins for the upgraded toolchain
+TORCH_VERSION=${TORCH_VERSION:-2.7.0}
+ISAAC_SIM_VERSION=${ISAAC_SIM_VERSION:-5.0.0}
+ISAAC_LAB_VERSION=${ISAAC_LAB_VERSION:-2.3.0}
 
-# Step 1: Setup Orbit
-echo "Setting up Orbit..."
-# cd ../orbit
-cd ./third_party/orbit
+# Location of the installed Isaac Sim 5.0 and Isaac Lab 2.3 checkout
+ISAACSIM_PATH=${ISAACSIM_PATH:-"$HOME/.local/share/ov/pkg/isaac-sim-${ISAAC_SIM_VERSION}"}
+ISAACLAB_PATH=${ISAACLAB_PATH:-"$HOME/IsaacLab"}
 
-# Remove existing symbolic link if it exists
-if [ -L "_isaac_sim" ]; then
-    echo "Removing existing symbolic link: _isaac_sim"
-    rm -rf _isaac_sim
-elif [ -e "_isaac_sim" ]; then
-    echo "Error: _isaac_sim exists but is not a symlink. Remove it manually."
+if [ ! -d "$ISAACSIM_PATH" ]; then
+    echo "Isaac Sim ${ISAAC_SIM_VERSION} not found at '$ISAACSIM_PATH'."
+    echo "Please install Isaac Sim 5.0 and set ISAACSIM_PATH before running this script."
     exit 1
 fi
-ln -s ${ISAACSIM_PATH} _isaac_sim
-echo "Running orbit.sh setup..."
-./orbit.sh --conda $ENV_NAME
+
+if [ ! -d "$ISAACLAB_PATH" ]; then
+    echo "Isaac Lab ${ISAAC_LAB_VERSION} checkout not found at '$ISAACLAB_PATH'."
+    echo "Clone the Isaac Lab 2.3 repo (or adjust ISAACLAB_PATH) before running this script."
+    exit 1
+fi
+
+# Load Conda environment handling
+eval "$(conda shell.bash hook)"
+
+echo "Creating conda env ${ENV_NAME} for Isaac Sim ${ISAAC_SIM_VERSION} / Isaac Lab ${ISAAC_LAB_VERSION}..."
+conda create -y -n $ENV_NAME python=3.10 -c conda-forge
 conda activate $ENV_NAME
-pip install numpy==1.26.4
+
+pip install --upgrade pip
+pip install "torch==${TORCH_VERSION}" "torchvision==${TORCH_VERSION}" "torchaudio==${TORCH_VERSION}"
+pip install numpy==1.26.4 hydra-core einops pyyaml rospkg matplotlib
+pip install imageio-ffmpeg==0.4.9 moviepy==1.0.3
 pip install "pydantic!=1.7,!=1.7.1,!=1.7.2,!=1.7.3,!=1.8,!=1.8.1,<2.0.0,>=1.6.2"
-pip install imageio-ffmpeg==0.4.9
-pip install moviepy==1.0.3
-pip install pyyaml
-pip install rospkg
-pip install matplotlib
 
-# Step 2: Install dependencies
-echo "Installing system dependencies..."
-sudo apt update && sudo apt install -y cmake build-essential
+# Expose Isaac Sim and Isaac Lab to the environment
+export ISAACSIM_PATH
+export ISAACLAB_PATH
+export PYTHONPATH="${ISAACSIM_PATH}/python:${ISAACSIM_PATH}/exts:${ISAACLAB_PATH}:${PYTHONPATH:-}"
+export LD_LIBRARY_PATH="${ISAACSIM_PATH}:${LD_LIBRARY_PATH:-}"
 
-# Install Orbit dependencies
-echo "Installing Orbit dependencies..."
-./orbit.sh --install
-# ./orbit.sh --extra
+# If the Isaac Lab helper exists, use it to register the extension into the env
+if [ -x "${ISAACLAB_PATH}/isaaclab.sh" ]; then
+    echo "Registering Isaac Lab ${ISAAC_LAB_VERSION}..."
+    "${ISAACLAB_PATH}/isaaclab.sh" --conda $ENV_NAME --skip-kit-install || true
+elif [ -f "${ISAACLAB_PATH}/setup.py" ] || [ -f "${ISAACLAB_PATH}/pyproject.toml" ]; then
+    echo "Installing Isaac Lab from source checkout at ${ISAACLAB_PATH}..."
+    pip install -e "${ISAACLAB_PATH}"
+fi
 
+python - <<'PY'
+import importlib
+import sys
 
-# Step 3: Navigate to OmniDrones directory
-echo "Setting up OmniDrones..."
-cd ../OmniDrones
-cp -r conda_setup/etc $CONDA_PREFIX
+for module in ("omni.isaac.core", "omni.isaac.lab"):
+    try:
+        importlib.import_module(module)
+    except Exception as exc:  # pragma: no cover - environment check
+        sys.exit(f"Failed to import {module}: {exc}")
 
-# Re-activate the environment
-conda activate $ENV_NAME
-
-# Verification
-echo "Verifying OmniIsaac Kit installation..."
-python -c "from omni.isaac.kit import SimulationApp"
-
-# Step 4: Setup OmniDrones package
-echo "Setting up OmniDrones package..."
-cd ../OmniDrones
-pip install -e .
-
-# Step 5: Install TensorDict and dependencies
-echo "Installing TensorDict dependencies..."
-pip uninstall -y tensordict
-pip uninstall -y tensordict
-pip install tomli  # If missing 'tomli'
-cd ../tensordict
-python setup.py develop
-
-
-# Step 6: Install TorchRL
-echo "Installing TorchRL..."
-cd ../rl
-python setup.py develop
-
-
-
-# Check which torch is being used
-python -c "import torch; print(torch.__path__)"
+print("Isaac Sim/Lab imports verified")
+PY
 
 echo "Setup completed successfully!"
 
